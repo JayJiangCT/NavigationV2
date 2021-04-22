@@ -96,12 +96,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-inline fun <reified T : AppCompatActivity> Context.startActivity() {
-    startActivity(
-        Intent(this, T::class.java)
-    )
-}
-
 class NavigationActivity : AppCompatActivity(),
     OnMapLongClickListener {
 
@@ -324,6 +318,7 @@ class NavigationActivity : AppCompatActivity(),
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        title = "Navigation Page"
         binding = ActivityNavigationBinding.inflate(layoutInflater)
         setContentView(binding.root)
         mapboxMap = binding.mapView.getMapboxMap()
