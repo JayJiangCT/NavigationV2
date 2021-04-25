@@ -114,6 +114,7 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     private val options: MapboxRouteLineOptions by lazy {
         MapboxRouteLineOptions.Builder(this)
             .withRouteLineResources(routeLineResources)
+            .withVanishingRouteLineEnabled(true)
             .withRouteLineBelowLayerId("road-label")
             .build()
     }
@@ -130,10 +131,10 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
 
     private val overviewEdgeInsets: EdgeInsets by lazy {
         EdgeInsets(
-            40.0 * pixelDensity,
-            40.0 * pixelDensity,
-            40.0 * pixelDensity,
-            40.0 * pixelDensity
+            100.0 * pixelDensity,
+            50.0 * pixelDensity,
+            100.0 * pixelDensity,
+            50.0 * pixelDensity
         )
     }
 
@@ -285,6 +286,7 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
                             0.0,
                             0.0
                         )
+                        options.zoom = 16.0
                         navigationCamera.requestNavigationCameraToIdle()
                         mapboxMap.easeTo(options)
                         routeLineApi.setRoutes(routes.map { route ->
