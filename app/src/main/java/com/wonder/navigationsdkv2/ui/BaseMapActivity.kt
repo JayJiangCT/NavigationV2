@@ -3,12 +3,15 @@ package com.wonder.navigationsdkv2.ui
 import android.Manifest
 import android.os.Bundle
 import androidx.viewbinding.ViewBinding
+import com.mapbox.common.Logger
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxMap
 import com.mapbox.maps.Style
 import com.mapbox.maps.Style.Companion
 import com.mapbox.maps.extension.style.StyleContract
 import com.mapbox.maps.extension.style.style
+import com.mapbox.maps.plugin.delegates.listeners.OnMapLoadErrorListener
+import com.mapbox.maps.plugin.delegates.listeners.eventdata.MapLoadErrorType
 import pub.devrel.easypermissions.AfterPermissionGranted
 
 /**
@@ -31,7 +34,16 @@ abstract class BaseMapActivity<B : ViewBinding> : BaseActivity<B>() {
         super.onCreate(savedInstanceState)
         mapboxMap = mapView.getMapboxMap()
         mapboxMap.loadStyleUri(Style.MAPBOX_STREETS)
-        mapReady()
+        mapboxMap.loadStyleUri(Style.MAPBOX_STREETS, {
+            mapReady()
+        }, object : OnMapLoadErrorListener {
+            override fun onMapLoadError(mapLoadErrorType: MapLoadErrorType, message: String) {
+                Logger.e(
+                    "MapTag",
+                    "The map initialize failed, error_type:$mapLoadErrorType, message:$message"
+                )
+            }
+        })
     }
 
     @Throws(UninitializedPropertyAccessException::class)
