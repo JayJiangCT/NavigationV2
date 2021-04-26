@@ -3,11 +3,11 @@ package com.wonder.navigationsdkv2
 import android.Manifest.permission
 import android.annotation.SuppressLint
 import android.content.res.Resources
-import android.graphics.BitmapFactory
 import android.location.Location
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.mapbox.android.core.location.LocationEngineProvider
 import com.mapbox.api.directions.v5.DirectionsCriteria
@@ -22,6 +22,7 @@ import com.mapbox.maps.MapView
 import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.generated.symbolLayer
 import com.mapbox.maps.extension.style.layers.getLayer
+import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
 import com.mapbox.maps.plugin.LocationPuck2D
@@ -42,11 +43,13 @@ import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSou
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSourceOptions
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
+import com.mapbox.navigation.ui.maps.route.line.model.ClosestRouteValue
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineOptions
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLine
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineClearValue
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineError
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineResources
+import com.mapbox.navigation.ui.maps.route.line.model.RouteNotFound
 import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue
 import com.wonder.navigationsdkv2.databinding.ActivityMainBinding
 import com.wonder.navigationsdkv2.extension.getBitmap
@@ -100,7 +103,9 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     private val markers = mutableListOf<Marker>()
 
     private val routeLineResources: RouteLineResources by lazy {
-        RouteLineResources.Builder().build()
+        RouteLineResources.Builder()
+//            .originWaypointIcon(R.drawable.start_pointer)
+            .build()
     }
 
     private val options: MapboxRouteLineOptions by lazy {
@@ -139,7 +144,10 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     @SuppressLint("MissingPermission")
     override fun mapReady() {
         binding.startNavigation.setOnClickListener {
-            startActivity<NavigationActivity>()
+            routeLineApi.getPrimaryRoute()?.let { route->
+                Toast.makeText(this@MainActivity, route.routeIndex(), Toast.LENGTH_SHORT).show()
+            }
+//            startActivity<NavigationActivity>()
         }
         binding.locationButton.setOnClickListener {
             locationProvider.lastLocation?.let { location ->
@@ -170,12 +178,43 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
             setLocationProvider(locationProvider)
             enabled = true
         }
-        mapView.getGesturesPlugin().addOnMapLongClickListener { point ->
-            val marker = Marker(point, "layer_$number", "source_$number", "image_$number")
-            markers.add(marker)
-            addMarker(marker)
-            number++
-            false
+        mapView.getGesturesPlugin().apply {
+            addOnMapLongClickListener { point ->
+                val marker = Marker(point, "layer_$number", "source_$number", "image_$number")
+                markers.add(marker)
+                addMarker(marker)
+                number++
+                false
+            }
+            addOnMapClickListener { point ->
+                mapboxMap.getStyle { style ->
+                    if (routeLineView.getAlternativeRoutesVisibility(style) == Visibility.VISIBLE) {
+                        routeLineApi.findClosestRoute(
+                            point,
+                            mapboxMap,
+                            30.0f * pixelDensity,
+                            resultConsumer = object :
+                                MapboxNavigationConsumer<Expected<ClosestRouteValue, RouteNotFound>> {
+                                override fun accept(value: Expected<ClosestRouteValue, RouteNotFound>) {
+                                    if (value is Expected.Success) {
+                                        val selectedRoute = value.value.route
+                                        if (selectedRoute != routeLineApi.getPrimaryRoute()) {
+                                            routeLineApi.updateToPrimaryRoute(
+                                                selectedRoute,
+                                                object :
+                                                    MapboxNavigationConsumer<Expected<RouteSetValue, RouteLineError>> {
+                                                    override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
+                                                        routeLineView.renderRouteDrawData(style, value)
+                                                    }
+                                                })
+                                        }
+                                    }
+                                }
+                            })
+                    }
+                }
+                false
+            }
         }
         initMapboxNavigation()
         initCamera()
@@ -271,6 +310,7 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
                 object : RoutesRequestCallback {
                     override fun onRoutesReady(routes: List<DirectionsRoute>) {
                         binding.progressBar.visibility = View.GONE
+                        binding.startNavigation.visibility = View.VISIBLE
                         mapboxNavigation.setRoutes(routes)
                         val options = mapboxMap.cameraForGeometry(
                             LineString.fromPolyline(routes.first().geometry()!!, Constants.PRECISION_6),
@@ -278,7 +318,7 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
                             0.0,
                             0.0
                         )
-                        options.zoom = 16.0
+//                        options.zoom = 15.0
                         navigationCamera.requestNavigationCameraToIdle()
                         mapboxMap.easeTo(options)
                         routeLineApi.setRoutes(routes.map { route ->
