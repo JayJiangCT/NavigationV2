@@ -3,7 +3,6 @@ package com.wonder.navigationsdkv2
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.location.Location
@@ -12,7 +11,7 @@ import android.view.View.GONE
 import android.view.View.VISIBLE
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.mapbox.android.core.location.LocationEngineProvider
+import androidx.viewbinding.ViewBinding
 import com.mapbox.api.directions.v5.models.BannerInstructions
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
@@ -23,16 +22,16 @@ import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapboxMap
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.LocationPuck2D
+import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.animation.easeTo
-import com.mapbox.maps.plugin.animation.getCameraAnimationsPlugin
 import com.mapbox.maps.plugin.delegates.listeners.OnMapLoadErrorListener
 import com.mapbox.maps.plugin.delegates.listeners.eventdata.MapLoadErrorType
 import com.mapbox.maps.plugin.gestures.GesturesPlugin
 import com.mapbox.maps.plugin.gestures.OnMapLongClickListener
-import com.mapbox.maps.plugin.gestures.getGesturesPlugin
+import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.locationcomponent.LocationComponentPlugin
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
-import com.mapbox.maps.plugin.locationcomponent.getLocationComponentPlugin
+import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.TimeFormat
 import com.mapbox.navigation.base.formatter.DistanceFormatterOptions
 import com.mapbox.navigation.base.internal.extensions.applyDefaultParams
@@ -89,19 +88,21 @@ import com.mapbox.navigation.ui.voice.api.MapboxVoiceInstructionsPlayer
 import com.mapbox.navigation.ui.voice.model.SpeechAnnouncement
 import com.mapbox.navigation.ui.voice.model.SpeechError
 import com.mapbox.navigation.ui.voice.model.SpeechValue
-import com.wonder.navigationsdkv2.databinding.ActivityNavigationBinding
+import com.wonder.navigationsdkv2.databinding.ActivitySimpleNavigationBinding
+import com.wonder.navigationsdkv2.extension.startActivity
+import com.wonder.navigationsdkv2.ui.BaseNavigationActivity
 import com.wonder.navigationsdkv2.utils.Utils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class NavigationActivity : AppCompatActivity(),
+class SimpleNavigationActivity : AppCompatActivity(),
     OnMapLongClickListener {
 
     private lateinit var mapboxMap: MapboxMap
     private lateinit var mapboxNavigation: MapboxNavigation
-    private lateinit var binding: ActivityNavigationBinding
+    private lateinit var binding: ActivitySimpleNavigationBinding
     private lateinit var locationComponent: LocationComponentPlugin
     private lateinit var navigationCamera: NavigationCamera
     private lateinit var viewportDataSource: MapboxNavigationViewportDataSource
@@ -121,6 +122,8 @@ class NavigationActivity : AppCompatActivity(),
     private val waypointsController = WaypointsController()
     private val navigationLocationProvider = NavigationLocationProvider()
     private val pixelDensity = Resources.getSystem().displayMetrics.density
+    private val route: DirectionsRoute
+        get() = intent.getSerializableExtra("extra_route") as DirectionsRoute
     private val overviewEdgeInsets: EdgeInsets by lazy {
         EdgeInsets(
             40.0 * pixelDensity,
@@ -242,7 +245,6 @@ class NavigationActivity : AppCompatActivity(),
                 bearingTransitionOptions = transitionOptions
             )
             viewportDataSource.onLocationChanged(mapMatcherResult.enhancedLocation)
-
             viewportDataSource.evaluate()
             if (mapMatcherResult.isTeleport) {
                 navigationCamera.resetFrame()
@@ -261,7 +263,6 @@ class NavigationActivity : AppCompatActivity(),
                         }
                     }
                 }
-
                 viewportDataSource.onRouteChanged(routes[0])
                 if (!isNavigating) {
                     binding.start.visibility = VISIBLE
@@ -319,13 +320,13 @@ class NavigationActivity : AppCompatActivity(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         title = "Navigation Page"
-        binding = ActivityNavigationBinding.inflate(layoutInflater)
+        binding = ActivitySimpleNavigationBinding.inflate(layoutInflater)
         setContentView(binding.root)
         mapboxMap = binding.mapView.getMapboxMap()
-        locationComponent = binding.mapView.getLocationComponentPlugin().apply {
+        locationComponent = binding.mapView.location.apply {
             this.locationPuck = LocationPuck2D(
                 bearingImage = ContextCompat.getDrawable(
-                    this@NavigationActivity,
+                    this@SimpleNavigationActivity,
                     R.drawable.mapbox_navigation_puck_icon
                 )
             )
@@ -334,18 +335,10 @@ class NavigationActivity : AppCompatActivity(),
             enabled = true
         }
         initNavigation()
-        viewportDataSource = MapboxNavigationViewportDataSource(
-            MapboxNavigationViewportDataSourceOptions.Builder().build(),
-            binding.mapView.getMapboxMap()
-        )
-        navigationCamera = NavigationCamera(
-            binding.mapView.getMapboxMap(),
-            binding.mapView.getCameraAnimationsPlugin(),
-            viewportDataSource
-        )
-        binding.mapView.getCameraAnimationsPlugin().addCameraAnimationsLifecycleListener(
-            NavigationBasicGesturesHandler(navigationCamera)
-        )
+        viewportDataSource = MapboxNavigationViewportDataSource(binding.mapView.getMapboxMap())
+        navigationCamera =
+            NavigationCamera(binding.mapView.getMapboxMap(), binding.mapView.camera, viewportDataSource)
+        binding.mapView.camera.addCameraAnimationsLifecycleListener(NavigationBasicGesturesHandler(navigationCamera))
         init()
         tripProgressApi = MapboxTripProgressApi(getTripProgressFormatter())
         maneuverApi = MapboxManeuverApi(
@@ -362,6 +355,7 @@ class NavigationActivity : AppCompatActivity(),
             getMapboxAccessTokenFromResources(),
             Locale.US.language
         )
+        mapboxNavigation.setRoutes(listOf(route))
     }
 
     override fun onStart() {
@@ -488,7 +482,7 @@ class NavigationActivity : AppCompatActivity(),
                 ) {
                 }
             })
-            mapboxReplayer.pushRealLocation(this@NavigationActivity, 0.0)
+            mapboxReplayer.pushRealLocation(this@SimpleNavigationActivity, 0.0)
             mapboxReplayer.play()
             registerRouteProgressObserver(replayProgressObserver)
             registerRoutesObserver(routesObserver)
@@ -542,9 +536,9 @@ class NavigationActivity : AppCompatActivity(),
 
     private fun updateCameraToOverview() {
         if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            viewportDataSource.overviewPaddingPropertyOverride(landscapeOverviewEdgeInsets)
+            viewportDataSource.overviewPadding = landscapeOverviewEdgeInsets
         } else {
-            viewportDataSource.overviewPaddingPropertyOverride(overviewEdgeInsets)
+            viewportDataSource.overviewPadding = overviewEdgeInsets
         }
         viewportDataSource.evaluate()
         navigationCamera.requestNavigationCameraToOverview()
@@ -552,9 +546,9 @@ class NavigationActivity : AppCompatActivity(),
 
     private fun updateCameraToFollowing() {
         if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            viewportDataSource.followingPaddingPropertyOverride(landscapeFollowingEdgeInsets)
+            viewportDataSource.followingPadding = landscapeFollowingEdgeInsets
         } else {
-            viewportDataSource.followingPaddingPropertyOverride(followingEdgeInsets)
+            viewportDataSource.followingPadding = followingEdgeInsets
         }
         viewportDataSource.evaluate()
         navigationCamera.requestNavigationCameraToFollowing()
@@ -588,7 +582,7 @@ class NavigationActivity : AppCompatActivity(),
     }
 
     private fun getGesturePlugin(): GesturesPlugin {
-        return binding.mapView.getGesturesPlugin()
+        return binding.mapView.gestures
     }
 
     private fun getMapboxAccessTokenFromResources(): String {

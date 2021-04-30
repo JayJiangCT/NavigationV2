@@ -7,7 +7,6 @@ import android.location.Location
 import android.os.Bundle
 import android.util.Log
 import android.view.View
-import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.mapbox.android.core.location.LocationEngineProvider
 import com.mapbox.api.directions.v5.DirectionsCriteria
@@ -54,15 +53,20 @@ import com.wonder.navigationsdkv2.databinding.ActivityMainBinding
 import com.wonder.navigationsdkv2.extension.getBitmap
 import com.wonder.navigationsdkv2.location.CustomerLocationProvider
 import com.wonder.navigationsdkv2.ui.BaseMapActivity
+import com.wonder.navigationsdkv2.ui.NavigationActivity
+import com.wonder.navigationsdkv2.ui.startNavigationActivity
 import com.wonder.navigationsdkv2.utils.Utils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import pub.devrel.easypermissions.AfterPermissionGranted
 import pub.devrel.easypermissions.EasyPermissions
 import java.util.Collections
 
 private const val RC_LOCATION = 0x70
 private val perms = arrayOf(
-        permission.ACCESS_FINE_LOCATION,
-        permission.ACCESS_COARSE_LOCATION,
+    permission.ACCESS_FINE_LOCATION,
+    permission.ACCESS_COARSE_LOCATION,
 )
 
 class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.PermissionCallbacks {
@@ -86,8 +90,8 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
 
     private val centerCameraOptions by lazy {
         CameraOptions.Builder()
-                .zoom(13.0)
-                .pitch(0.0)
+            .zoom(13.0)
+            .pitch(0.0)
     }
 
     private var number: Int = 0
@@ -103,15 +107,15 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     private val routeLineResources: RouteLineResources by lazy {
         RouteLineResources.Builder()
 //            .originWaypointIcon(R.drawable.start_pointer)
-                .build()
+            .build()
     }
 
     private val options: MapboxRouteLineOptions by lazy {
         MapboxRouteLineOptions.Builder(this)
-                .withRouteLineResources(routeLineResources)
-                .withVanishingRouteLineEnabled(true)
-                .withRouteLineBelowLayerId("road-label")
-                .build()
+            .withRouteLineResources(routeLineResources)
+            .withVanishingRouteLineEnabled(true)
+            .withRouteLineBelowLayerId("road-label")
+            .build()
     }
 
     private val routeLineApi: MapboxRouteLineApi by lazy {
@@ -126,10 +130,10 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
 
     private val overviewEdgeInsets: EdgeInsets by lazy {
         EdgeInsets(
-                100.0 * pixelDensity,
-                50.0 * pixelDensity,
-                100.0 * pixelDensity,
-                50.0 * pixelDensity
+            100.0 * pixelDensity,
+            50.0 * pixelDensity,
+            100.0 * pixelDensity,
+            50.0 * pixelDensity
         )
     }
 
@@ -143,9 +147,8 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     override fun mapReady() {
         binding.startNavigation.setOnClickListener {
             routeLineApi.getPrimaryRoute()?.let { route ->
-                Toast.makeText(this@MainActivity, route.routeIndex(), Toast.LENGTH_SHORT).show()
+                this@MainActivity.startNavigationActivity<NavigationActivity>(route, binding.switchButton.isChecked)
             }
-//            startActivity<NavigationActivity>()
         }
         binding.locationButton.setOnClickListener {
             locationProvider.lastLocation?.let { location ->
@@ -154,24 +157,29 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
             }
         }
         binding.cleanButton.setOnClickListener {
+            launch(Dispatchers.IO) {
+                clearMarkers()
+                cancel()
+            }
             routeLineApi.clearRouteLine(object :
-                    MapboxNavigationConsumer<Expected<RouteLineClearValue, RouteLineError>> {
+                MapboxNavigationConsumer<Expected<RouteLineClearValue, RouteLineError>> {
                 override fun accept(value: Expected<RouteLineClearValue, RouteLineError>) {
                     mapboxMap.getStyle { style ->
                         routeLineView.renderClearRouteLineValue(style, value)
                     }
                 }
             })
+
         }
         binding.routeDirect.setOnClickListener {
             fetchRoute()
         }
         locationComponent = mapView.location.apply {
             locationPuck = LocationPuck2D(
-                    bearingImage = ContextCompat.getDrawable(
-                            this@MainActivity,
-                            R.drawable.ic_puck
-                    )
+                bearingImage = ContextCompat.getDrawable(
+                    this@MainActivity,
+                    R.drawable.ic_puck
+                )
             )
             setLocationProvider(locationProvider)
             enabled = true
@@ -188,27 +196,27 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
                 mapboxMap.getStyle { style ->
                     if (routeLineView.getAlternativeRoutesVisibility(style) == Visibility.VISIBLE) {
                         routeLineApi.findClosestRoute(
-                                point,
-                                mapboxMap,
-                                30.0f * pixelDensity,
-                                resultConsumer = object :
-                                        MapboxNavigationConsumer<Expected<ClosestRouteValue, RouteNotFound>> {
-                                    override fun accept(value: Expected<ClosestRouteValue, RouteNotFound>) {
-                                        if (value is Expected.Success) {
-                                            val selectedRoute = value.value.route
-                                            if (selectedRoute != routeLineApi.getPrimaryRoute()) {
-                                                routeLineApi.updateToPrimaryRoute(
-                                                        selectedRoute,
-                                                        object :
-                                                                MapboxNavigationConsumer<Expected<RouteSetValue, RouteLineError>> {
-                                                            override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
-                                                                routeLineView.renderRouteDrawData(style, value)
-                                                            }
-                                                        })
-                                            }
+                            point,
+                            mapboxMap,
+                            30.0f * pixelDensity,
+                            resultConsumer = object :
+                                MapboxNavigationConsumer<Expected<ClosestRouteValue, RouteNotFound>> {
+                                override fun accept(value: Expected<ClosestRouteValue, RouteNotFound>) {
+                                    if (value is Expected.Success) {
+                                        val selectedRoute = value.value.route
+                                        if (selectedRoute != routeLineApi.getPrimaryRoute()) {
+                                            routeLineApi.updateToPrimaryRoute(
+                                                selectedRoute,
+                                                object :
+                                                    MapboxNavigationConsumer<Expected<RouteSetValue, RouteLineError>> {
+                                                    override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
+                                                        routeLineView.renderRouteDrawData(style, value)
+                                                    }
+                                                })
                                         }
                                     }
-                                })
+                                }
+                            })
                     }
                 }
                 false
@@ -237,10 +245,25 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
         }
     }
 
+    private fun clearMarkers() {
+        mapboxMap.getStyle { style ->
+            if (markers.isNotEmpty()) {
+                val iterator = markers.iterator()
+                while (iterator.hasNext()) {
+                    val marker = iterator.next()
+                    style.removeStyleImage(marker.imageId)
+                    style.removeStyleSource(marker.sourceId)
+                    style.removeStyleLayer(marker.layerId)
+                    iterator.remove()
+                }
+            }
+        }
+    }
+
     private fun initMapboxNavigation() {
         mapboxNavigation = MapboxNavigation(
-                NavigationOptions.Builder(this).accessToken(Utils.getMapboxAccessToken(this))
-                        .locationEngine(LocationEngineProvider.getBestLocationEngine(this)).build()
+            NavigationOptions.Builder(this).accessToken(Utils.getMapboxAccessToken(this))
+                .locationEngine(LocationEngineProvider.getBestLocationEngine(this)).build()
         )
         mapboxNavigation.registerLocationObserver(object : LocationObserver {
             override fun onEnhancedLocationChanged(enhancedLocation: Location, keyPoints: List<Location>) {
@@ -260,18 +283,18 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     private fun initCamera() {
         viewportDataSource = MapboxNavigationViewportDataSource(mapboxMap)
         navigationCamera = NavigationCamera(
-                mapView.getMapboxMap(),
-                mapView.camera,
-                viewportDataSource
+            mapView.getMapboxMap(),
+            mapView.camera,
+            viewportDataSource
         )
     }
 
     @AfterPermissionGranted(RC_LOCATION)
     private fun permissionCheck() {
         if (!EasyPermissions.hasPermissions(
-                        this@MainActivity,
-                        *perms
-                )
+                this@MainActivity,
+                *perms
+            )
         ) {
             requestPermissions()
         }
@@ -279,64 +302,64 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
 
     private fun requestPermissions() {
         EasyPermissions.requestPermissions(
-                this@MainActivity,
-                "We need your location, storage read and write permissions, please open it",
-                RC_LOCATION,
-                *perms
+            this@MainActivity,
+            "We need your location, storage read and write permissions, please open it",
+            RC_LOCATION,
+            *perms
         )
     }
 
     private fun fetchRoute() {
-        binding.progressBar.visibility = View.VISIBLE
+        showProgress("")
         locationProvider.lastLocation?.let { location ->
             val points = markers.map { it.point }.toMutableList()
             points.add(0, Point.fromLngLat(location.longitude, location.latitude))
             mapboxNavigation.requestRoutes(
-                    RouteOptions.builder()
-                            .applyDefaultParams()
-                            .accessToken(Utils.getMapboxAccessToken(this))
-                            .coordinates(points)
-                            .steps(true)
-                            .alternatives(true)
-                            .continueStraight(false)
-                            .voiceInstructions(true)
-                            .bannerInstructions(true)
-                            .voiceUnits(DirectionsCriteria.IMPERIAL)
-                            .annotationsList(Collections.singletonList(DirectionsCriteria.ANNOTATION_MAXSPEED))
-                            .build(),
-                    object : RoutesRequestCallback {
-                        override fun onRoutesReady(routes: List<DirectionsRoute>) {
-                            binding.progressBar.visibility = View.GONE
-                            binding.startNavigation.visibility = View.VISIBLE
-                            mapboxNavigation.setRoutes(routes)
-                            val options = mapboxMap.cameraForGeometry(
-                                    LineString.fromPolyline(routes.first().geometry()!!, Constants.PRECISION_6),
-                                    overviewEdgeInsets,
-                                    0.0,
-                                    0.0
-                            )
+                RouteOptions.builder()
+                    .applyDefaultParams()
+                    .accessToken(Utils.getMapboxAccessToken(this))
+                    .coordinates(points)
+                    .steps(true)
+                    .alternatives(true)
+                    .continueStraight(false)
+                    .voiceInstructions(true)
+                    .bannerInstructions(true)
+                    .voiceUnits(DirectionsCriteria.IMPERIAL)
+                    .annotationsList(Collections.singletonList(DirectionsCriteria.ANNOTATION_MAXSPEED))
+                    .build(),
+                object : RoutesRequestCallback {
+                    override fun onRoutesReady(routes: List<DirectionsRoute>) {
+                        hideProgress()
+                        binding.startNavigation.visibility = View.VISIBLE
+                        mapboxNavigation.setRoutes(routes)
+                        val options = mapboxMap.cameraForGeometry(
+                            LineString.fromPolyline(routes.first().geometry()!!, Constants.PRECISION_6),
+                            overviewEdgeInsets,
+                            0.0,
+                            0.0
+                        )
 //                        options.zoom = 15.0
-                            navigationCamera.requestNavigationCameraToIdle()
-                            mapboxMap.easeTo(options)
-                            routeLineApi.setRoutes(routes.map { route ->
-                                RouteLine(route, null)
-                            }, object : MapboxNavigationConsumer<Expected<RouteSetValue, RouteLineError>> {
-                                override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
-                                    mapboxMap.getStyle() { style ->
-                                        routeLineView.renderRouteDrawData(style, value)
-                                    }
+                        navigationCamera.requestNavigationCameraToIdle()
+                        mapboxMap.easeTo(options)
+                        routeLineApi.setRoutes(routes.map { route ->
+                            RouteLine(route, null)
+                        }, object : MapboxNavigationConsumer<Expected<RouteSetValue, RouteLineError>> {
+                            override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
+                                mapboxMap.getStyle() { style ->
+                                    routeLineView.renderRouteDrawData(style, value)
                                 }
-                            })
-                        }
+                            }
+                        })
+                    }
 
-                        override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
-                            binding.progressBar.visibility = View.GONE
-                        }
+                    override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+                        hideProgress()
+                    }
 
-                        override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) {
-                            binding.progressBar.visibility = View.GONE
-                        }
-                    })
+                    override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) {
+                        hideProgress()
+                    }
+                })
         }
     }
 
@@ -361,9 +384,9 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     }
 
     override fun onRequestPermissionsResult(
-            requestCode: Int,
-            permissions: Array<out String>,
-            grantResults: IntArray
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults)
