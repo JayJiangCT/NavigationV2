@@ -51,9 +51,11 @@ import com.mapbox.navigation.ui.maps.route.line.model.RouteNotFound
 import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue
 import com.wonder.navigationsdkv2.databinding.ActivityMainBinding
 import com.wonder.navigationsdkv2.extension.getBitmap
+import com.wonder.navigationsdkv2.extension.startActivity
 import com.wonder.navigationsdkv2.location.CustomerLocationProvider
 import com.wonder.navigationsdkv2.ui.BaseMapActivity
 import com.wonder.navigationsdkv2.ui.NavigationActivity
+import com.wonder.navigationsdkv2.ui.camera.MapboxCameraAnimationsActivity
 import com.wonder.navigationsdkv2.ui.startNavigationActivity
 import com.wonder.navigationsdkv2.utils.Utils
 import kotlinx.coroutines.Dispatchers
@@ -146,9 +148,10 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     @SuppressLint("MissingPermission")
     override fun mapReady() {
         binding.startNavigation.setOnClickListener {
-            routeLineApi.getPrimaryRoute()?.let { route ->
-                this@MainActivity.startNavigationActivity<NavigationActivity>(route, binding.switchButton.isChecked)
-            }
+//            routeLineApi.getPrimaryRoute()?.let { route ->
+//                this@MainActivity.startNavigationActivity<NavigationActivity>(route, binding.switchButton.isChecked)
+//            }
+            startActivity<MapboxCameraAnimationsActivity>()
         }
         binding.locationButton.setOnClickListener {
             locationProvider.lastLocation?.let { location ->

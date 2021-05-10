@@ -32,6 +32,7 @@ import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.replay.MapboxReplayer
 import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayProgressObserver
+import com.mapbox.navigation.core.replay.route.ReplayRouteMapper
 import com.mapbox.navigation.core.trip.session.BannerInstructionsObserver
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.MapMatcherResult
@@ -83,6 +84,8 @@ inline fun <reified T : BaseNavigationActivity<out ViewBinding>> Context.startNa
         putExtra("is_simulated", simulated)
     }
 }
+
+private const val TAG = "BaseNavigationActivity"
 
 abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
 
@@ -176,9 +179,13 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
                     override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
                         ifNonNull(routeLineView, mapboxMap.getStyle()) { view, style ->
                             view.renderRouteDrawData(style, value)
+                            updateCameraToFollowing()
                         }
                     }
                 })
+                if (simulated) {
+                    startSimulation(selectedRoute)
+                }
                 viewportDataSource.onRouteChanged(selectedRoute)
             } else {
                 viewportDataSource.clearRouteData()
@@ -200,12 +207,12 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
         ReplayProgressObserver(mapboxReplayer)
     }
 
+    private val replayRouteMapper by lazy {
+        ReplayRouteMapper()
+    }
+
     private val routeProgressObserver = object : RouteProgressObserver {
         override fun onRouteProgressChanged(routeProgress: RouteProgress) {
-            if (!isNavigating) {
-                isNavigating = true
-                updateCameraToFollowing()
-            }
             viewportDataSource.onRouteProgressChanged(routeProgress)
             viewportDataSource.evaluate()
             ifNonNull(routeArrowApi, routeArrowView, mapboxMap.getStyle()) { api, view, style ->
@@ -361,11 +368,6 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
                     mapboxNavigation.unregisterLocationObserver(this)
                 }
             })
-            if (simulated) {
-                mapboxReplayer.pushRealLocation(this@BaseNavigationActivity, 0.0)
-                mapboxReplayer.play()
-                registerRouteProgressObserver(replayProgressObserver)
-            }
             registerTripSessionStateObserver(tripStateObserver)
             registerRoutesObserver(routesObserver)
             registerRouteProgressObserver(routeProgressObserver)
@@ -421,10 +423,8 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
     @SuppressLint("MissingPermission")
     private fun startNavigation() {
         if (::mapboxNavigation.isInitialized) {
-            mapboxNavigation.apply {
-                setRoutes(listOf(route))
-                startTripSession()
-            }
+            mapboxNavigation.startTripSession()
+            mapboxNavigation.setRoutes(listOf(route))
         }
     }
 
@@ -438,6 +438,16 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
                 }
             )
         }
+    }
+
+    private fun startSimulation(route: DirectionsRoute) {
+        mapboxReplayer.stop()
+        mapboxReplayer.clearEvents()
+        mapboxReplayer.pushRealLocation(this, 0.0)
+        val replayEvents = replayRouteMapper.mapDirectionsRouteGeometry(route)
+        mapboxReplayer.pushEvents(replayEvents)
+        mapboxReplayer.seekTo(replayEvents.first())
+        mapboxReplayer.play()
     }
 
     override fun onStop() {
@@ -476,6 +486,7 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
 
     protected fun stopNavigation() {
         navigationCamera.requestNavigationCameraToIdle()
+        mapboxNavigation.setRoutes(emptyList())
         clearRouteLine()
     }
 

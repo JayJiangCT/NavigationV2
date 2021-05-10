@@ -63,7 +63,7 @@ class NavigationActivity : BaseNavigationActivity<ActivityNavigationBinding>(), 
 
     override fun mapReady() {
         binding.recenter.setOnClickListener {
-            updateCameraToFollowing()
+            navigationCamera.requestNavigationCameraToFollowing()
             binding.recenter.visibility = View.GONE
         }
         binding.stop.setOnClickListener {

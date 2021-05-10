@@ -64,7 +64,6 @@
         android:layout_marginTop="@dimen/mapbox_dimen_8dp"
         android:layout_marginEnd="@dimen/mapbox_dimen_16dp"
         android:layout_marginBottom="14dp"
-        android:visibility="invisible"
         app:layout_constraintBottom_toTopOf="@id/tripProgressCard"
         app:layout_constraintEnd_toEndOf="parent" />
 
