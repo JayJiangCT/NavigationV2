@@ -63,6 +63,8 @@ class NavigationActivity : BaseNavigationActivity<ActivityNavigationBinding>(), 
 
     override fun mapReady() {
         binding.recenter.setOnClickListener {
+            viewportDataSource.options.followingFrameOptions.zoomUpdatesAllowed = true
+            viewportDataSource.evaluate()
             navigationCamera.requestNavigationCameraToFollowing()
             binding.recenter.visibility = View.GONE
         }

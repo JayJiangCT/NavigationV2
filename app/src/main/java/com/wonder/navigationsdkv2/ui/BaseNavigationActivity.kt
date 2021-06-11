@@ -18,6 +18,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.plugin.LocationPuck2D
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.locationcomponent.LocationComponentPlugin
@@ -89,7 +90,7 @@ private const val TAG = "BaseNavigationActivity"
 
 abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
 
-    protected val route: DirectionsRoute
+    private val route: DirectionsRoute
         get() = intent.getSerializableExtra("extra_route") as DirectionsRoute
 
     private val simulated: Boolean
@@ -114,7 +115,7 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
      */
     protected lateinit var navigationCamera: NavigationCamera
 
-    private lateinit var viewportDataSource: MapboxNavigationViewportDataSource
+    protected lateinit var viewportDataSource: MapboxNavigationViewportDataSource
 
     private val centerCameraOptions by lazy {
         CameraOptions.Builder()
@@ -167,7 +168,11 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
     private var routeArrowApi: MapboxRouteArrowApi? = null
 
     private val onIndicatorPositionChangedListener = OnIndicatorPositionChangedListener { point ->
-        routeLineApi?.updateTraveledRouteLine(point)
+        routeLineApi?.updateTraveledRouteLine(point)?.let { result ->
+            mapboxMap.getStyle { style ->
+                routeLineView?.renderVanishingRouteLineUpdateValue(style, result)
+            }
+        }
     }
 
     private val routesObserver = object : RoutesObserver {
@@ -179,7 +184,10 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
                     override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
                         ifNonNull(routeLineView, mapboxMap.getStyle()) { view, style ->
                             view.renderRouteDrawData(style, value)
-                            updateCameraToFollowing()
+                            viewportDataSource.options.followingFrameOptions.zoomUpdatesAllowed = true
+                            viewportDataSource.options.followingFrameOptions.centerUpdatesAllowed = true
+                            viewportDataSource.evaluate()
+                            navigationCamera.requestNavigationCameraToFollowing()
                         }
                     }
                 })
@@ -357,15 +365,15 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
             registerLocationObserver(object : LocationObserver {
                 override fun onEnhancedLocationChanged(enhancedLocation: Location, keyPoints: List<Location>) {
                     Log.d("TAG", "enhancedLocation: $enhancedLocation")
+                    navigationCamera.requestNavigationCameraToIdle()
+                    val point = Point.fromLngLat(enhancedLocation.longitude, enhancedLocation.latitude)
+                    mapboxMap.easeTo(centerCameraOptions.center(point).build())
+                    navigationLocationProvider.changePosition(enhancedLocation)
+                    mapboxNavigation.unregisterLocationObserver(this)
                 }
 
                 override fun onRawLocationChanged(rawLocation: Location) {
                     Log.d("TAG", "rawLocation: $rawLocation")
-                    navigationCamera.requestNavigationCameraToIdle()
-                    val point = Point.fromLngLat(rawLocation.longitude, rawLocation.latitude)
-                    mapboxMap.easeTo(centerCameraOptions.center(point).build())
-                    navigationLocationProvider.changePosition(rawLocation)
-                    mapboxNavigation.unregisterLocationObserver(this)
                 }
             })
             registerTripSessionStateObserver(tripStateObserver)
@@ -380,7 +388,7 @@ abstract class BaseNavigationActivity<B : ViewBinding> : BaseMapActivity<B>() {
     @OptIn(ExperimentalMapboxNavigationAPI::class)
     private fun initCamera() {
         val debugger = MapboxNavigationViewportDataSourceDebugger(this, mapView)
-        debugger.enabled = true
+        debugger.enabled = simulated
         viewportDataSource = MapboxNavigationViewportDataSource(mapboxMap)
         viewportDataSource.debugger = debugger
         navigationCamera = NavigationCamera(

@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.content.res.Resources
 import android.location.Location
 import android.os.Bundle
+import android.os.Parcel
+import android.os.Parcelable
 import android.util.Log
 import android.view.View
 import androidx.core.content.ContextCompat
@@ -61,6 +63,7 @@ import com.wonder.navigationsdkv2.utils.Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.parcelize.Parcelize
 import pub.devrel.easypermissions.AfterPermissionGranted
 import pub.devrel.easypermissions.EasyPermissions
 import java.util.Collections
@@ -109,13 +112,13 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     private val routeLineResources: RouteLineResources by lazy {
         RouteLineResources.Builder()
 //            .originWaypointIcon(R.drawable.start_pointer)
+//            .destinationWaypointIcon(R.drawable.end_pointer)
             .build()
     }
 
     private val options: MapboxRouteLineOptions by lazy {
         MapboxRouteLineOptions.Builder(this)
             .withRouteLineResources(routeLineResources)
-            .withVanishingRouteLineEnabled(true)
             .withRouteLineBelowLayerId("road-label")
             .build()
     }
@@ -148,10 +151,10 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
     @SuppressLint("MissingPermission")
     override fun mapReady() {
         binding.startNavigation.setOnClickListener {
-//            routeLineApi.getPrimaryRoute()?.let { route ->
+            routeLineApi.getPrimaryRoute()?.let { route ->
 //                this@MainActivity.startNavigationActivity<NavigationActivity>(route, binding.switchButton.isChecked)
-//            }
-            startActivity<MapboxCameraAnimationsActivity>()
+                startActivity<MapboxCameraAnimationsActivity>()
+            }
         }
         binding.locationButton.setOnClickListener {
             locationProvider.lastLocation?.let { location ->
@@ -164,6 +167,7 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
                 clearMarkers()
                 cancel()
             }
+            binding.startNavigation.visibility = View.GONE
             routeLineApi.clearRouteLine(object :
                 MapboxNavigationConsumer<Expected<RouteLineClearValue, RouteLineError>> {
                 override fun accept(value: Expected<RouteLineClearValue, RouteLineError>) {
@@ -314,55 +318,57 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
 
     private fun fetchRoute() {
         showProgress("")
-        locationProvider.lastLocation?.let { location ->
-            val points = markers.map { it.point }.toMutableList()
-            points.add(0, Point.fromLngLat(location.longitude, location.latitude))
-            mapboxNavigation.requestRoutes(
-                RouteOptions.builder()
-                    .applyDefaultParams()
-                    .accessToken(Utils.getMapboxAccessToken(this))
-                    .coordinates(points)
-                    .steps(true)
-                    .alternatives(true)
-                    .continueStraight(false)
-                    .voiceInstructions(true)
-                    .bannerInstructions(true)
-                    .voiceUnits(DirectionsCriteria.IMPERIAL)
-                    .annotationsList(Collections.singletonList(DirectionsCriteria.ANNOTATION_MAXSPEED))
-                    .build(),
-                object : RoutesRequestCallback {
-                    override fun onRoutesReady(routes: List<DirectionsRoute>) {
-                        hideProgress()
-                        binding.startNavigation.visibility = View.VISIBLE
-                        mapboxNavigation.setRoutes(routes)
-                        val options = mapboxMap.cameraForGeometry(
-                            LineString.fromPolyline(routes.first().geometry()!!, Constants.PRECISION_6),
-                            overviewEdgeInsets,
-                            0.0,
-                            0.0
-                        )
+        if (markers.isNotEmpty()) {
+            locationProvider.lastLocation?.let { location ->
+                val points = markers.map { it.point }.toMutableList()
+                points.add(0, Point.fromLngLat(location.longitude, location.latitude))
+                mapboxNavigation.requestRoutes(
+                    RouteOptions.builder()
+                        .applyDefaultParams()
+                        .accessToken(Utils.getMapboxAccessToken(this))
+                        .coordinates(points)
+                        .steps(true)
+                        .alternatives(true)
+                        .continueStraight(false)
+                        .voiceInstructions(true)
+                        .bannerInstructions(true)
+                        .voiceUnits(DirectionsCriteria.IMPERIAL)
+                        .annotationsList(Collections.singletonList(DirectionsCriteria.ANNOTATION_MAXSPEED))
+                        .build(),
+                    object : RoutesRequestCallback {
+                        override fun onRoutesReady(routes: List<DirectionsRoute>) {
+                            hideProgress()
+                            binding.startNavigation.visibility = View.VISIBLE
+                            mapboxNavigation.setRoutes(routes)
+                            val options = mapboxMap.cameraForGeometry(
+                                LineString.fromPolyline(routes.first().geometry()!!, Constants.PRECISION_6),
+                                overviewEdgeInsets,
+                                0.0,
+                                0.0
+                            )
 //                        options.zoom = 15.0
-                        navigationCamera.requestNavigationCameraToIdle()
-                        mapboxMap.easeTo(options)
-                        routeLineApi.setRoutes(routes.map { route ->
-                            RouteLine(route, null)
-                        }, object : MapboxNavigationConsumer<Expected<RouteSetValue, RouteLineError>> {
-                            override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
-                                mapboxMap.getStyle() { style ->
-                                    routeLineView.renderRouteDrawData(style, value)
+                            navigationCamera.requestNavigationCameraToIdle()
+                            mapboxMap.easeTo(options)
+                            routeLineApi.setRoutes(routes.map { route ->
+                                RouteLine(route, null)
+                            }, object : MapboxNavigationConsumer<Expected<RouteSetValue, RouteLineError>> {
+                                override fun accept(value: Expected<RouteSetValue, RouteLineError>) {
+                                    mapboxMap.getStyle() { style ->
+                                        routeLineView.renderRouteDrawData(style, value)
+                                    }
                                 }
-                            }
-                        })
-                    }
+                            })
+                        }
 
-                    override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
-                        hideProgress()
-                    }
+                        override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+                            hideProgress()
+                        }
 
-                    override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) {
-                        hideProgress()
-                    }
-                })
+                        override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) {
+                            hideProgress()
+                        }
+                    })
+            }
         }
     }
 
@@ -395,5 +401,6 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
-    data class Marker(val point: Point, val layerId: String, val sourceId: String, val imageId: String)
+    @Parcelize
+    data class Marker(val point: Point, val layerId: String, val sourceId: String, val imageId: String) : Parcelable
 }
