@@ -4,11 +4,13 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import android.util.Log
+import dagger.hilt.android.HiltAndroidApp
 import java.util.Stack
 
 /**
  * author jiangjay on  07-05-2021
  */
+@HiltAndroidApp
 class MainApplication : Application() {
 
     private val activityStack by lazy {
