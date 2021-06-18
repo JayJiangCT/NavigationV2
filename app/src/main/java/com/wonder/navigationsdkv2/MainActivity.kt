@@ -9,6 +9,7 @@ import android.os.Parcel
 import android.os.Parcelable
 import android.util.Log
 import android.view.View
+import androidx.appcompat.app.AlertDialog.Builder
 import androidx.core.content.ContextCompat
 import com.mapbox.android.core.location.LocationEngineProvider
 import com.mapbox.api.directions.v5.DirectionsCriteria
@@ -146,6 +147,16 @@ class MainActivity : BaseMapActivity<ActivityMainBinding>(), EasyPermissions.Per
         permissionCheck()
         super.onCreate(savedInstanceState)
         title = "Map Page"
+        Builder(this).apply {
+            setMessage("This a alert dialog")
+            setCancelable(false)
+            setNegativeButton("NO") { dialog, _ ->
+                dialog.dismiss()
+            }
+            setPositiveButton("YES") { dialog, _ ->
+                dialog.dismiss()
+            }
+        }.show()
     }
 
     @SuppressLint("MissingPermission")

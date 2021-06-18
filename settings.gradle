@@ -1,2 +1,4 @@
-include ':app'
 rootProject.name = "NavigationSDKV2"
+include ':app'
+include ':mapboxexamples'
+include ':core'

@@ -9,7 +9,7 @@ android {
     buildToolsVersion "30.0.3"
 
     defaultConfig {
-        applicationId "com.wonder.navigationsdkv2"
+        applicationId "com.wonder.mapbox.mapboxexamples"
         minSdkVersion 26
         targetSdkVersion 30
         versionCode 1
